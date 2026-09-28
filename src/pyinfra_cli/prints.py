@@ -4,6 +4,7 @@ import json
 import platform
 import re
 import sys
+import unicodedata
 from typing import TYPE_CHECKING
 from collections.abc import Callable, Iterator
 
@@ -23,6 +24,19 @@ ANSI_RE = re.compile(r"\033\[((?:\d|;)*)([a-zA-Z])")
 
 def _strip_ansi(value):
     return ANSI_RE.sub("", value)
+
+
+def _display_width(value: str) -> int:
+    """
+    Return the number of terminal cells ``value`` occupies once ANSI codes are
+    removed. East Asian Wide and Fullwidth characters take two cells, every
+    other character takes one.
+    """
+
+    width = 0
+    for char in _strip_ansi(value):
+        width += 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+    return width
 
 
 def _get_group_combinations(inventory: Iterator[Host]):
@@ -314,8 +328,8 @@ def print_rows(rows):
             if i >= len(row_column_widths):
                 row_column_widths.append([])
 
-            # Length of the column (with ansi codes removed)
-            width = len(_strip_ansi(column.strip()))
+            # Display width of the column (with ansi codes removed)
+            width = _display_width(column.strip())
             row_column_widths[i].append(width)
 
     # Get the max width of each column and add 4 padding spaces
@@ -329,9 +343,8 @@ def print_rows(rows):
             justified = []
 
             for i, column in enumerate(columns):
-                stripped = _strip_ansi(column)
                 desired_width = column_widths[i]
-                padding = desired_width - len(stripped)
+                padding = desired_width - _display_width(column)
 
                 justified.append(
                     f"{column}{' '.join('' for _ in range(padding))}",
